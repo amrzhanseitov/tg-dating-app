@@ -4,6 +4,7 @@ from os import getenv
 import os
 import sys
 from dotenv import load_dotenv
+import aiohttp
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
@@ -24,6 +25,23 @@ async def start_command(message: Message):
     await message.answer(
         "Привет! Я бот для знакомства)"
     )
+
+    user_data = {
+        "user_id": message.from_user.id,
+        "username": message.from_user.username,
+    }
+
+    api_url = "http://127.0.0.1:8000/api/users/"
+
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(api_url, json=user_data) as response:
+                if response.status == 201:
+                    await message.answer("Ваши данные успешно сохранены!")
+                else:
+                    await message.answer(f"Ошибка при сохранении данных: {response.status}")
+        except Exception as e:
+            await message.answer(f"Произошла ошибка при подключении к API: {e}")
 
 @dp.message()
 async def echo(message: Message):
