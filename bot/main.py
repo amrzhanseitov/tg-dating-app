@@ -24,16 +24,17 @@ dp = Dispatcher()
 @dp.message(CommandStart())
 async def start_command(message: Message, state: FSMContext):
     await message.answer(
-        "Привет! Я бот для знакомства), Для начала, сколько тебе лет?"
+        "Привет! Я бот для знакомства), Для начала, как тебя зовут?"
     )
+    await state.set_state(ProfileStates.waiting_for_name)
 
+
+@dp.message(ProfileStates.waiting_for_name)
+async def process_name(message: Message, state: FSMContext):
+    await state.update_data(first_name=message.text)
+    await message.answer("Отлично! Теперь сколько тебе лет?")
     await state.set_state(ProfileStates.waiting_for_age)
-
-    user_data = {
-        "user_id": message.from_user.id,
-        "username": message.from_user.username,
-    }
-
+    
     
 
 @dp.message(ProfileStates.waiting_for_age)
@@ -98,13 +99,15 @@ async def process_photo(message: Message, state: FSMContext):
     user_data = await state.get_data()  
 
     user_data['telegram_id'] = message.from_user.id
-    user_data['username'] = message.from_user.username or f"user_{message.from_user.id}"
-
-    display_name = message.from_user.first_name or "Аноним"
+    user_data['username'] = str(message.from_user.id)
 
 
+    display_name = user_data.get('first_name', 'Пользователь')
 
-    await message.answer("Спасибо! Твой профиль создан.")
+
+
+    await message.answer("Спасибо! Сохраняю твой профиль...")
+
     api_url = "http://127.0.0.1:8000/api/users/"
 
     async with aiohttp.ClientSession() as session:
@@ -130,6 +133,9 @@ async def process_photo(message: Message, state: FSMContext):
                     photo=photo_id,
                     caption=profile_caption
                 )
+            elif response.status == 400:
+                logging.error(f"Дубликат анкеты от {message.from_user.id}.")
+                await message.answer("Похоже, ты уже создавал анкету.")
 
             else:
                 logging.error(f"Ошибка при сохранении пользователя: {response.status}")
