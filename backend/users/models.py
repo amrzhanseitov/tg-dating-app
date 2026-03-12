@@ -52,5 +52,7 @@ class User(AbstractUser):
         verbose_name='ID фото из Telegram'
     )
 
+    is_video=models.BooleanField(default=False, verbose_name='Есть видео')
+
     def __str__(self):
         return self.username

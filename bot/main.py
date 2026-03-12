@@ -26,6 +26,7 @@ async def start_command(message: Message, state: FSMContext):
     await message.answer(
         "Привет! Я бот для знакомства), Для начала, как тебя зовут?"
     )
+    
     await state.set_state(ProfileStates.waiting_for_name)
 
 
@@ -87,14 +88,28 @@ async def process_looking_for(message: Message, state: FSMContext):
 async def process_bio(message: Message, state: FSMContext):
 
     await state.update_data(bio=message.text)
-    await message.answer("Отлично! Теперь отправь мне свою фотографию.")
+    await message.answer("Отлично! Теперь отправь мне свою фотографию или короткое видео.")
     await state.set_state(ProfileStates.waiting_for_photo)
 
-@dp.message(ProfileStates.waiting_for_photo, F.photo)
-async def process_photo(message: Message, state: FSMContext):
+@dp.message(ProfileStates.waiting_for_photo, F.photo | F.video)
+async def process_media(message: Message, state: FSMContext):
     
-    photo_id = message.photo[-1].file_id
-    await state.update_data(photo_id=photo_id) 
+    is_video = False
+
+    if message.photo:
+        media_id = message.photo[-1].file_id
+    elif message.video:
+
+        if message.video.duration > 15:
+            await message.answer("Пожалуйста, отправьте видео длительностью не более 60 секунд.")
+            return
+        
+        media_id = message.video.file_id
+        is_video = True
+
+
+    
+    await state.update_data(photo_id=media_id, is_video=is_video) 
 
     user_data = await state.get_data()  
 
@@ -129,10 +144,11 @@ async def process_photo(message: Message, state: FSMContext):
                     f"О себе: {user_data['bio']}\n\n"
             
                 )
-                await message.answer_photo(
-                    photo=photo_id,
-                    caption=profile_caption
-                )
+                if is_video:
+                    await message.answer_video(media_id, caption=profile_caption)
+                else:
+                    await message.answer_photo(media_id, caption=profile_caption)
+                    
             elif response.status == 400:
                 logging.error(f"Дубликат анкеты от {message.from_user.id}.")
                 await message.answer("Похоже, ты уже создавал анкету.")
@@ -146,7 +162,7 @@ async def process_photo(message: Message, state: FSMContext):
 
 @dp.message(ProfileStates.waiting_for_photo)
 async def process_photo_invalid(message: Message):
-    await message.answer("Похоже вы не отправили фотографию. Пожалуйста, отправьте фотографию, чтобы продолжить.")
+    await message.answer("Похоже вы не отправили фотографию или видео. Пожалуйста, отправьте фотографию или короткое видео, чтобы продолжить.")
 
 
 
