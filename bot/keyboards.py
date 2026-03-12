@@ -15,3 +15,19 @@ def get_gender_keyboard():
         one_time_keyboard=True
     )
     return keyboard
+
+
+def get_main_menu_keyboard():
+    btn_search_profiles = KeyboardButton(text="Моя анкета")
+    btn_profile = KeyboardButton(text="Изменить анкету")
+    btn_edit = KeyboardButton(text="Искать анкету")
+
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [btn_search_profiles],
+            [btn_profile],
+            [btn_edit]
+        ],
+        resize_keyboard=True
+    )
+    return keyboard

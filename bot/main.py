@@ -14,7 +14,7 @@ from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 
 from states import ProfileStates
-from keyboards import get_gender_keyboard
+from keyboards import get_gender_keyboard, get_main_menu_keyboard
 
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
@@ -23,8 +23,25 @@ dp = Dispatcher()
 
 @dp.message(CommandStart())
 async def start_command(message: Message, state: FSMContext):
+
+    api_url = f"http://127.0.0.1:8000/api/users/?telegram_id={message.from_user.id}"
+
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(api_url) as response:
+            if response.status == 200:
+                user = await response.json()
+
+                if len(user) > 0:
+                    await message.answer("Приветствую тебя снова!",
+                    reply_markup=get_main_menu_keyboard())
+                    return
+                
+
+
     await message.answer(
-        "Привет! Я бот для знакомства), Для начала, как тебя зовут?"
+        "Привет! Я бот для знакомства), Для начала, как тебя зовут?",
+        reply_markup=ReplyKeyboardRemove()
     )
     
     await state.set_state(ProfileStates.waiting_for_name)
@@ -145,10 +162,10 @@ async def process_media(message: Message, state: FSMContext):
             
                 )
                 if is_video:
-                    await message.answer_video(media_id, caption=profile_caption)
+                    await message.answer_video(video=media_id, caption=profile_caption)
                 else:
-                    await message.answer_photo(media_id, caption=profile_caption)
-                    
+                    await message.answer_photo(photo=media_id, caption=profile_caption)
+
             elif response.status == 400:
                 logging.error(f"Дубликат анкеты от {message.from_user.id}.")
                 await message.answer("Похоже, ты уже создавал анкету.")
