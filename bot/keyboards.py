@@ -1,4 +1,4 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 def get_gender_keyboard():
     
@@ -15,6 +15,20 @@ def get_gender_keyboard():
         one_time_keyboard=True
     )
     return keyboard
+
+
+def get_swipe_keyboard(user_id):
+    
+    btn_like = InlineKeyboardButton(text="❤️", callback_data=f"like_{user_id}")
+    btn_dislike = InlineKeyboardButton(text="👎", callback_data=f"dislike_{user_id}")
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [btn_like, btn_dislike]
+        ]
+    )
+    return keyboard
+
 
 
 def get_main_menu_keyboard():

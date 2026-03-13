@@ -14,7 +14,7 @@ from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 
 from states import ProfileStates
-from keyboards import get_gender_keyboard, get_main_menu_keyboard
+from keyboards import get_gender_keyboard, get_main_menu_keyboard, get_swipe_keyboard
 
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
@@ -182,6 +182,40 @@ async def process_photo_invalid(message: Message):
     await message.answer("Похоже вы не отправили фотографию или видео. Пожалуйста, отправьте фотографию или короткое видео, чтобы продолжить.")
 
 
+
+@dp.message(message: Message)
+async def search_profiles(message: Message):
+
+    api_url = "http://127.0.0.1:8000/api/users/"
+
+    await message.answer("Ищу для тебя анкеты...")
+
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(api_url) as response:
+            if response.status == 200:
+                profile = await response.json()
+
+                gender_text = "Мужской" if profile['gender'] == 'M' else "Женский"
+               
+
+        
+                profile_caption = (
+                    f"Имя: {profile['first_name']}, {profile['age']}\n"
+                    f"Пол: {gender_text}\n"
+                    f"О себе: {profile['bio']}\n")
+
+                keyboard = get_swipe_keyboard(profile['telegram_id'])
+
+                if profile['is_video']:
+                    await message.answer_video(video=profile['photo_id'], caption=profile_caption, reply_markup=keyboard)
+                else:
+                    await message.answer_photo(photo=profile['photo_id'], caption=profile_caption, reply_markup=keyboard)   
+            elif response.status == 404:
+                await message.answer("К сожалению, подходящих анкет не найдено.")
+            else:
+                logging.error(f"Ошибка при получении профилей: {response.status}")
+                await message.answer("Произошла ошибка при поиске анкет. Пожалуйста, попробуй снова позже.")
 
 
 async def main() -> None:
