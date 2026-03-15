@@ -183,10 +183,10 @@ async def process_photo_invalid(message: Message):
 
 
 
-@dp.message(message: Message)
+@dp.message(F.text == "Искать анкету")
 async def search_profiles(message: Message):
 
-    api_url = "http://127.0.0.1:8000/api/users/"
+    api_url = f"http://127.0.0.1:8000/api/users/next_profile/?telegram_id={message.from_user.id}"
 
     await message.answer("Ищу для тебя анкеты...")
 
@@ -194,7 +194,16 @@ async def search_profiles(message: Message):
     async with aiohttp.ClientSession() as session:
         async with session.get(api_url) as response:
             if response.status == 200:
-                profile = await response.json()
+                data = await response.json()
+
+                if isinstance(data, list):
+                    if len(data) == 0:
+                        await message.answer("К сожалению, подходящих анкет не найдено.")
+                        return
+                    profile = data[0]
+                
+                else:
+                    profile = data
 
                 gender_text = "Мужской" if profile['gender'] == 'M' else "Женский"
                
@@ -207,10 +216,18 @@ async def search_profiles(message: Message):
 
                 keyboard = get_swipe_keyboard(profile['telegram_id'])
 
-                if profile['is_video']:
-                    await message.answer_video(video=profile['photo_id'], caption=profile_caption, reply_markup=keyboard)
+                photo_id = profile.get('photo_id')
+
+                if not photo_id:
+                    
+                    await message.answer("У этого пользователя нет фото", reply_markup=keyboard)
+
                 else:
-                    await message.answer_photo(photo=profile['photo_id'], caption=profile_caption, reply_markup=keyboard)   
+                    if profile.get("is_video"):
+                        await message.answer_video(video=photo_id, caption=profile_caption, reply_markup=keyboard)
+                    else:
+                        await message.answer_photo(photo=photo_id, caption=profile_caption, reply_markup=keyboard)
+  
             elif response.status == 404:
                 await message.answer("К сожалению, подходящих анкет не найдено.")
             else:
