@@ -10,7 +10,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message, ReplyKeyboardRemove, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 from states import ProfileStates
@@ -234,8 +234,51 @@ async def search_profiles(message: Message):
                 logging.error(f"Ошибка при получении профилей: {response.status}")
                 await message.answer("Произошла ошибка при поиске анкет. Пожалуйста, попробуй снова позже.")
 
+@dp.callback_query(F.data.startwith("like_") | F.data.startwith("dislike_"))
+async def process_swipe(callback: CallbackQuery):
+    
+    action, target_id = callback.data.split("-")
+
+    if action == "like":
+        await callback.answer("❤️")
+    else:
+        await callback.answer("👎")
+
+    await callback.message.delete()
+
+    api_url = f"http://127.0.0.1:8000/api/users/next_profile/?telegram_id={message.from_user.id}"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(api_url) as response:
+            if response.status == 200:
+                data = await response.json()
+                profile = data[0] if ininstance(data, list) else data
+            
+            gender_text = "Мужской" if profile.get('gender') == 'M' else "Женский"
+            profile_caption = (
+                    f"<b>Твоя анкета успешно создана! Вот как ее увидят другие:</b>\n\n"
+                    f"Имя: {profile.get('first_name')}\n"
+                    f"Возраст: {profile['age']}\n"
+                    f"Пол: {gender_text}\n"
+                    f"О себе: {profile.get('bio')}\n\n"
+            
+                )
+
+            keyboard = get_swipe_keyboard(profile['telegram_id'])
+            photo_id = profile.get('photo_id')
+
+
+            if not photo_id:
+                await callback.message.answer("У этого пользователя нет фото")
+            else:
+                if profile.get("is_video"):
+                    await callback.message.answer_video(video=photo_id, caption=profile_caption, reply_markup=keyboard)
+                else:
+                    await callback.message.answer_video(video=photo_id, caption=profile_caption, reply_markup=keyboard)
+            
 
 async def main() -> None:
+
     bot = Bot(
     token=TOKEN, 
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
