@@ -205,7 +205,7 @@ async def search_profiles(message: Message):
                 else:
                     profile = data
 
-                gender_text = "Мужской" if profile['gender'] == 'M' else "Женский"
+                    gender_text = "Мужской" if profile['gender'] == 'M' else "Женский"
                
 
         
@@ -234,10 +234,10 @@ async def search_profiles(message: Message):
                 logging.error(f"Ошибка при получении профилей: {response.status}")
                 await message.answer("Произошла ошибка при поиске анкет. Пожалуйста, попробуй снова позже.")
 
-@dp.callback_query(F.data.startwith("like_") | F.data.startwith("dislike_"))
+@dp.callback_query(F.data.startswith("like_") | F.data.startswith("dislike_"))
 async def process_swipe(callback: CallbackQuery):
     
-    action, target_id = callback.data.split("-")
+    action, target_id = callback.data.split("_")
 
     if action == "like":
         await callback.answer("❤️")
@@ -246,7 +246,7 @@ async def process_swipe(callback: CallbackQuery):
 
     await callback.message.delete()
 
-    api_url = f"http://127.0.0.1:8000/api/users/next_profile/?telegram_id={message.from_user.id}"
+    api_url = f"http://127.0.0.1:8000/api/users/next_profile/?telegram_id={callback.from_user.id}"
 
     async with aiohttp.ClientSession() as session:
         async with session.get(api_url) as response:
