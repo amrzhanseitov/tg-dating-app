@@ -1,292 +1,39 @@
+"""
+Точка входа бота. Только инициализация и запуск.
+Вся логика — в handlers/registration.py, handlers/profile.py, handlers/swipe.py.
+"""
+
 import asyncio
 import logging
-from os import getenv
 import os
 import sys
-from dotenv import load_dotenv
-import aiohttp
 
-from aiogram import Bot, Dispatcher, F
+from dotenv import load_dotenv
+from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import CommandStart
-from aiogram.types import Message, ReplyKeyboardRemove, CallbackQuery
-from aiogram.fsm.context import FSMContext
 
-from states import ProfileStates
-from keyboards import get_gender_keyboard, get_main_menu_keyboard, get_swipe_keyboard
+from handlers.registration import router as registration_router
+from handlers.profile import router as profile_router
+from handlers.swipe import router as swipe_router
 
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
+
 dp = Dispatcher()
+dp.include_router(registration_router)
+dp.include_router(profile_router)
+dp.include_router(swipe_router)
 
-
-@dp.message(CommandStart())
-async def start_command(message: Message, state: FSMContext):
-
-    api_url = f"http://127.0.0.1:8000/api/users/?telegram_id={message.from_user.id}"
-
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(api_url) as response:
-            if response.status == 200:
-                user = await response.json()
-
-                if len(user) > 0:
-                    await message.answer("Приветствую тебя снова!",
-                    reply_markup=get_main_menu_keyboard())
-                    return
-                
-
-
-    await message.answer(
-        "Привет! Я бот для знакомства), Для начала, как тебя зовут?",
-        reply_markup=ReplyKeyboardRemove()
-    )
-    
-    await state.set_state(ProfileStates.waiting_for_name)
-
-
-@dp.message(ProfileStates.waiting_for_name)
-async def process_name(message: Message, state: FSMContext):
-    await state.update_data(first_name=message.text)
-    await message.answer("Отлично! Теперь сколько тебе лет?")
-    await state.set_state(ProfileStates.waiting_for_age)
-    
-    
-
-@dp.message(ProfileStates.waiting_for_age)
-async def process_age(message: Message, state: FSMContext):
-    
-    if not message.text.isdigit():
-        await message.answer("Пожалуйста, введите корректный возраст (число).")
-        return
-
-    await state.update_data(age=int(message.text))
-
-    await message.answer("ОтличноЙ! Теперь выбери свой пол:", reply_markup=get_gender_keyboard())
-
-    await state.set_state(ProfileStates.waiting_for_gender)
-
-
-@dp.message(ProfileStates.waiting_for_gender)
-async def process_gender(message: Message, state: FSMContext):
-    
-    if message.text not in ["Мужской", "Женский"]:
-        await message.answer("Пожалуйста, выберите пол, используя кнопки.")
-        return
-
-    
-    gender_code = "M" if message.text == "Мужской" else "F"
-    await state.update_data(gender=gender_code)
-
-    await message.answer("Кого ты ищешь?")
-    await state.set_state(ProfileStates.waiting_for_looking_for)
-
-
-@dp.message(ProfileStates.waiting_for_looking_for)
-async def process_looking_for(message: Message, state: FSMContext):
-    
-    if message.text not in ["Мужской", "Женский"]:
-        await message.answer("Пожалуйста, выберите пол, используя кнопки.", reply_markup=get_gender_keyboard())
-        return
-
-    
-    looking_for_code = "M" if message.text == "Мужской" else "F"
-
-    await state.update_data(looking_for=looking_for_code)
-
-    await message.answer("Расскажи немного о себе.", reply_markup=ReplyKeyboardRemove())
-
-    await state.set_state(ProfileStates.waiting_for_bio)
-
-
-@dp.message(ProfileStates.waiting_for_bio)
-async def process_bio(message: Message, state: FSMContext):
-
-    await state.update_data(bio=message.text)
-    await message.answer("Отлично! Теперь отправь мне свою фотографию или короткое видео.")
-    await state.set_state(ProfileStates.waiting_for_photo)
-
-@dp.message(ProfileStates.waiting_for_photo, F.photo | F.video)
-async def process_media(message: Message, state: FSMContext):
-    
-    is_video = False
-
-    if message.photo:
-        media_id = message.photo[-1].file_id
-    elif message.video:
-
-        if message.video.duration > 15:
-            await message.answer("Пожалуйста, отправьте видео длительностью не более 60 секунд.")
-            return
-        
-        media_id = message.video.file_id
-        is_video = True
-
-
-    
-    await state.update_data(photo_id=media_id, is_video=is_video) 
-
-    user_data = await state.get_data()  
-
-    user_data['telegram_id'] = message.from_user.id
-    user_data['username'] = str(message.from_user.id)
-
-
-    display_name = user_data.get('first_name', 'Пользователь')
-
-
-
-    await message.answer("Спасибо! Сохраняю твой профиль...")
-
-    api_url = "http://127.0.0.1:8000/api/users/"
-
-    async with aiohttp.ClientSession() as session:
-        async with session.post(api_url, json=user_data) as response:
-            if response.status == 201:
-                logging.info("Пользователь успешно сохранён в базе данных.")
-
-                gender_text = "Мужской" if user_data['gender'] == "M" else "Женский"
-                looking_for_text = "Мужской" if user_data['looking_for'] == "M" else "Женский"
-
-
-            
-                profile_caption = (
-                    f"<b>Твоя анкета успешно создана! Вот как ее увидят другие:</b>\n\n"
-                    f"Имя: {display_name}\n"
-                    f"Возраст: {user_data['age']}\n"
-                    f"Пол: {gender_text}\n"
-                    f"Ищет: {looking_for_text}\n"
-                    f"О себе: {user_data['bio']}\n\n"
-            
-                )
-                if is_video:
-                    await message.answer_video(video=media_id, caption=profile_caption)
-                else:
-                    await message.answer_photo(photo=media_id, caption=profile_caption)
-
-            elif response.status == 400:
-                logging.error(f"Дубликат анкеты от {message.from_user.id}.")
-                await message.answer("Похоже, ты уже создавал анкету.")
-
-            else:
-                logging.error(f"Ошибка при сохранении пользователя: {response.status}")
-                await message.answer("Произошла ошибка при сохранении твоего профиля. Пожалуйста, попробуй снова позже.")
-
-    await state.clear()
-
-
-@dp.message(ProfileStates.waiting_for_photo)
-async def process_photo_invalid(message: Message):
-    await message.answer("Похоже вы не отправили фотографию или видео. Пожалуйста, отправьте фотографию или короткое видео, чтобы продолжить.")
-
-
-
-@dp.message(F.text == "Искать анкету")
-async def search_profiles(message: Message):
-
-    api_url = f"http://127.0.0.1:8000/api/users/next_profile/?telegram_id={message.from_user.id}"
-
-    await message.answer("Ищу для тебя анкеты...")
-
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(api_url) as response:
-            if response.status == 200:
-                data = await response.json()
-
-                if isinstance(data, list):
-                    if len(data) == 0:
-                        await message.answer("К сожалению, подходящих анкет не найдено.")
-                        return
-                    profile = data[0]
-                
-                else:
-                    profile = data
-
-                    gender_text = "Мужской" if profile['gender'] == 'M' else "Женский"
-               
-
-        
-                profile_caption = (
-                    f"Имя: {profile['first_name']}, {profile['age']}\n"
-                    f"Пол: {gender_text}\n"
-                    f"О себе: {profile['bio']}\n")
-
-                keyboard = get_swipe_keyboard(profile['telegram_id'])
-
-                photo_id = profile.get('photo_id')
-
-                if not photo_id:
-                    
-                    await message.answer("У этого пользователя нет фото", reply_markup=keyboard)
-
-                else:
-                    if profile.get("is_video"):
-                        await message.answer_video(video=photo_id, caption=profile_caption, reply_markup=keyboard)
-                    else:
-                        await message.answer_photo(photo=photo_id, caption=profile_caption, reply_markup=keyboard)
-  
-            elif response.status == 404:
-                await message.answer("К сожалению, подходящих анкет не найдено.")
-            else:
-                logging.error(f"Ошибка при получении профилей: {response.status}")
-                await message.answer("Произошла ошибка при поиске анкет. Пожалуйста, попробуй снова позже.")
-
-@dp.callback_query(F.data.startswith("like_") | F.data.startswith("dislike_"))
-async def process_swipe(callback: CallbackQuery):
-    
-    action, target_id = callback.data.split("_")
-
-    if action == "like":
-        await callback.answer("❤️")
-    else:
-        await callback.answer("👎")
-
-    await callback.message.delete()
-
-    api_url = f"http://127.0.0.1:8000/api/users/next_profile/?telegram_id={callback.from_user.id}"
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(api_url) as response:
-            if response.status == 200:
-                data = await response.json()
-                profile = data[0] if ininstance(data, list) else data
-            
-            gender_text = "Мужской" if profile.get('gender') == 'M' else "Женский"
-            profile_caption = (
-                    f"<b>Твоя анкета успешно создана! Вот как ее увидят другие:</b>\n\n"
-                    f"Имя: {profile.get('first_name')}\n"
-                    f"Возраст: {profile['age']}\n"
-                    f"Пол: {gender_text}\n"
-                    f"О себе: {profile.get('bio')}\n\n"
-            
-                )
-
-            keyboard = get_swipe_keyboard(profile['telegram_id'])
-            photo_id = profile.get('photo_id')
-
-
-            if not photo_id:
-                await callback.message.answer("У этого пользователя нет фото")
-            else:
-                if profile.get("is_video"):
-                    await callback.message.answer_video(video=photo_id, caption=profile_caption, reply_markup=keyboard)
-                else:
-                    await callback.message.answer_video(video=photo_id, caption=profile_caption, reply_markup=keyboard)
-            
 
 async def main() -> None:
-
     bot = Bot(
-    token=TOKEN, 
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-)
+        token=TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     await dp.start_polling(bot)
-
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    asyncio.run(main()) 
+    asyncio.run(main())

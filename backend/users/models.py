@@ -52,7 +52,47 @@ class User(AbstractUser):
         verbose_name='ID фото из Telegram'
     )
 
-    is_video=models.BooleanField(default=False, verbose_name='Есть видео')
+    is_video = models.BooleanField(default=False, verbose_name='Есть видео')
+
+    # Реальный @handle из Telegram (может быть пустым — не у всех пользователей есть username)
+    tg_username = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        verbose_name='Telegram @username'
+    )
 
     def __str__(self):
         return self.username
+
+
+class Like(models.Model):
+
+    from_user = models.ForeignKey(User, related_name='likes_sent', on_delete=models.CASCADE)
+
+    to_user = models.ForeignKey(User, related_name='likes_received', on_delete=models.CASCADE)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('from_user', 'to_user')
+
+    def __str__(self):
+        return f"{self.from_user.username} лайкнул(а) {self.to_user.username}"
+
+
+# НОВОЕ: модель дизлайков — аналог Like, используется чтобы исключать
+# просмотренные анкеты из ленты (next_profile)
+class Dislike(models.Model):
+
+    from_user = models.ForeignKey(User, related_name='dislikes_sent', on_delete=models.CASCADE)
+
+    to_user = models.ForeignKey(User, related_name='dislikes_received', on_delete=models.CASCADE)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('from_user', 'to_user')
+
+    def __str__(self):
+        return f"{self.from_user.username} дизлайкнул(а) {self.to_user.username}"
